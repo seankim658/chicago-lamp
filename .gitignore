@@ -1,0 +1,13 @@
+# Secrets. API keys never enter the repository.
+.env
+
+# Local data written by a collector run.
+/buffer/
+
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
