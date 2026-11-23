@@ -25,6 +25,32 @@ dev = [
 [tool.chicago-lamp]
 layers = ["shared", "stages"]
 
+# Licenses a shipped dependency may carry. Dev tools never ship, so they are not
+# checked. A package whose metadata names no SPDX expression gets a reviewed entry
+# for its exact version, read from the license file it ships.
+[tool.chicago-lamp.licenses]
+allowed = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "PSF-2.0",
+]
+
+[[tool.chicago-lamp.licenses.reviewed]]
+package = "python-dateutil"
+version = "2.9.0.post0"
+license = "Apache-2.0 AND BSD-3-Clause"
+reason = "Metadata says Dual License. Its LICENSE puts all code under BSD-3-Clause and code since 2017-12-01 under Apache-2.0 too."
+
+[[tool.chicago-lamp.licenses.reviewed]]
+package = "s3transfer"
+version = "0.19.3"
+license = "Apache-2.0"
+reason = "Metadata says Apache License 2.0, which is not an SPDX ID. Its LICENSE.txt is the Apache License 2.0 text."
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

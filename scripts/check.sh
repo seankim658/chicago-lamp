@@ -20,7 +20,7 @@ usage: bash scripts/check.sh [--parallel] [--packages a,b] [--help]
 
 Run every check on the whole repository, or with --packages on chosen packages,
 and print one line per step with the time it took. The steps are lint, format,
-mypy, deps, imports and tests.
+mypy, deps, imports, licenses and tests.
 
 Every step runs even after one fails. A failed step prints the last lines of its
 output, and every step's full output stays in the log folder named at the end.
@@ -33,8 +33,8 @@ options
   --parallel        run the tests with one worker per CPU
   --packages a,b    check only these packages, each named by its folder, such as
                     lamp-collector. Lint, format, mypy, deps and tests are
-                    narrowed to them. The imports step still runs on the whole
-                    workspace. Packages that depend on the named ones are not
+                    narrowed to them. The imports and licenses steps still run
+                    on the whole workspace. Packages that depend on the named ones are not
                     added, so a change to a shared package can break a dependent
                     that a scoped run never checks. The tests of scripts/checks
                     run only in a full check. A scoped run is never a full check.
@@ -228,6 +228,14 @@ import_contracts() {
         uv_run lint-imports "$contracts"
 }
 
+# Only runtime dependencies ship, so dependency groups and the workspace's own
+# packages are left out.
+licenses() {
+    uv export --quiet --locked --all-packages --no-default-groups --no-emit-workspace \
+        --no-hashes --no-header --no-annotate |
+        uv_run python scripts/checks/license_check.py
+}
+
 run_test_command() { uv_run pytest "$@"; }
 
 test_options=(-q -rs)
@@ -278,6 +286,7 @@ run_steps() {
         run_full_steps
     fi
     run_step imports "$whole_note" import_contracts
+    run_step licenses "$whole_note" licenses
     run_tests
 }
 
