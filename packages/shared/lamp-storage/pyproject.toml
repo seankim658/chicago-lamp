@@ -3,7 +3,10 @@ name = "lamp-storage"
 version = "0.0.0"
 description = "Storage interface for local folders and S3-compatible object storage"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "boto3>=1.44.9",
+    "botocore>=1.44.9",
+]
 
 [build-system]
 requires = ["uv_build>=0.11,<0.12"]
