@@ -22,7 +22,7 @@ The collector needs two keys, and CTA issues them separately.
 1. **Bus Tracker key.** Create an account on CTA Bus Tracker, then apply under "Developer API" in your account. See [CTA's Bus Tracker developer page](https://www.transitchicago.com/developers/bustracker/).
 2. **Developer Center key.** This key covers Train Tracker and the GTFS-Realtime feeds. Apply through [CTA's Developer Center](https://www.transitchicago.com/developers/traintracker/).
 
-Both keys come with a default limit of 100,000 calls a day. Copy `.env.example` to `.env` and fill in the keys. Never commit `.env`, and never paste a key into an issue, a log or a test fixture.
+By default CTA allows 100,000 calls a day on a Bus Tracker key and 50,000 on a Train Tracker key. Copy `.env.example` to `.env` and fill in the keys.
 
 ## Development
 
