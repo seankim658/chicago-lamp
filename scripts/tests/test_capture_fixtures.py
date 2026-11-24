@@ -193,9 +193,10 @@ def test_main_refuses_to_overwrite_an_existing_file(
 def test_main_stops_before_any_call_when_a_key_is_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CTA_BUS_KEY", raising=False)
     monkeypatch.setenv("CTA_TRAIN_KEY", TRAIN_KEY)
 
     assert main([str(tmp_path / "fixtures.zip")]) == 2
-    assert "CTA_BUS_KEY is not set" in capsys.readouterr().err
+    assert "cta_bus_key" in capsys.readouterr().err
     assert list(tmp_path.iterdir()) == []

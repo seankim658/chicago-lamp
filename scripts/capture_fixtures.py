@@ -6,12 +6,11 @@ train lines are polled every --interval seconds for --minutes, to show how
 often positions change. The zip holds each body as CTA returned it and
 calls.jsonl with one line per call. Nothing is written if a key appears in it.
 
-Keys come from CTA_BUS_KEY and CTA_TRAIN_KEY.
+Keys come from CTA_BUS_KEY and CTA_TRAIN_KEY, in the environment or in .env.
 """
 
 import argparse
 import json
-import os
 import sys
 import time
 import zipfile
@@ -32,7 +31,9 @@ from lamp_collector.feeds import (
     train_positions,
 )
 from lamp_collector.fetch import Fetcher, FetchResult, cta_client
-from lamp_collector.keys import ApiKeyError, ApiKeys
+from lamp_collector.keys import ApiKeys
+from lamp_collector.settings import Settings
+from pydantic import ValidationError
 
 INDEX_NAME = "calls.jsonl"
 GTFS_REALTIME_FEEDS = (
@@ -258,8 +259,8 @@ def main(argv: Sequence[str]) -> int:
         sys.stderr.write(f"{arguments.output} already exists\n")
         return 2
     try:
-        keys = ApiKeys.from_environ(os.environ)
-    except ApiKeyError as error:
+        keys = Settings().api_keys()
+    except ValidationError as error:
         sys.stderr.write(f"{error}\n")
         return 2
     with cta_client() as client:

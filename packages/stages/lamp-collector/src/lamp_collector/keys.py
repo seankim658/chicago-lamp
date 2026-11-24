@@ -5,7 +5,6 @@ GTFS-Realtime calls use the train key.
 """
 
 import re
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -25,7 +24,7 @@ class KeyKind(StrEnum):
 
 
 class ApiKeyError(ValueError):
-    """A key is missing or malformed. The message names the variable, never the key."""
+    """A key is malformed. The message names the variable, never the key."""
 
 
 @dataclass(frozen=True)
@@ -37,13 +36,6 @@ class ApiKeys:
         _check_key(BUS_KEY_VARIABLE, self.bus)
         _check_key(TRAIN_KEY_VARIABLE, self.train)
 
-    @classmethod
-    def from_environ(cls, environ: Mapping[str, str]) -> "ApiKeys":
-        return cls(
-            bus=_read_variable(environ, BUS_KEY_VARIABLE),
-            train=_read_variable(environ, TRAIN_KEY_VARIABLE),
-        )
-
     def for_kind(self, kind: KeyKind) -> str:
         if kind is KeyKind.BUS:
             return self.bus
@@ -54,13 +46,6 @@ class ApiKeys:
         for key in sorted({self.bus, self.train}, key=len, reverse=True):
             text = text.replace(key, REDACTED)
         return text
-
-
-def _read_variable(environ: Mapping[str, str], variable: str) -> str:
-    value = environ.get(variable, "")
-    if not value:
-        raise ApiKeyError(f"{variable} is not set")
-    return value
 
 
 def _check_key(variable: str, key: str) -> None:

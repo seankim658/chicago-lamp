@@ -70,6 +70,7 @@ select = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
+plugins = ["pydantic.mypy"]
 # scripts/check.sh names the paths and checks each package in its own run.
 mypy_path = "scripts/checks:scripts"
 
