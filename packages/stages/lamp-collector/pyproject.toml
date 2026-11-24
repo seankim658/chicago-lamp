@@ -3,7 +3,9 @@ name = "lamp-collector"
 version = "0.0.0"
 description = "Collector that polls CTA feeds and keeps every raw response"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+]
 
 [build-system]
 requires = ["uv_build>=0.13,<0.14"]
