@@ -72,7 +72,7 @@ strict = true
 mypy_path = "scripts/checks"
 
 [tool.pytest]
-testpaths = ["packages", "scripts"]
+testpaths = ["packages", "scripts", "tests"]
 pythonpath = ["scripts/checks"]
 addopts = ["--import-mode=importlib", "--strict-markers", "--strict-config", "-ra"]
 xfail_strict = true

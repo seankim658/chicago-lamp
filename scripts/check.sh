@@ -13,7 +13,7 @@ readonly MANIFEST_GLOB="packages/*/*/pyproject.toml"
 # Lines of a failed step's log shown in the terminal.
 readonly TAIL_LINES=60
 # Paths outside the packages that a full run also type checks.
-MYPY_EXTRA_PATHS=(scripts)
+MYPY_EXTRA_PATHS=(conftest.py tests scripts)
 readonly MYPY_EXTRA_PATHS
 # -----------------------------------------------------------------------------
 

@@ -2,14 +2,16 @@
 # Set up a disposable Linux sandbox to build and test this repository.
 #
 # Install the uv version pyproject.toml requires and the workspace's locked
-# dependencies. With --check, also run scripts/check.sh with every argument after
-# --check, in this same process. It replaces system files, so run it only as root
-# in a throwaway sandbox, never on a workstation or in CI. Running it again is safe.
+# dependencies. With --fixtures, unpack a zip of recorded CTA responses into
+# fixtures/, replacing any there, so the tests that need them run. With --check,
+# also run scripts/check.sh with every argument after --check, in this same
+# process. It replaces system files, so run it only as root in a throwaway
+# sandbox, never on a workstation or in CI. Running it again is safe.
 #
-# usage: bash scripts/sandbox-setup.sh [--check [CHECK ARGS...]]
+# usage: bash scripts/sandbox-setup.sh [--fixtures ZIP] [--check [CHECK ARGS...]]
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+readonly USAGE="usage: bash scripts/sandbox-setup.sh [--fixtures ZIP] [--check [CHECK ARGS...]]"
 
 fail() {
     echo "sandbox-setup: $1" >&2
@@ -50,23 +52,45 @@ install_dependencies() {
     echo "dependencies: synced from uv.lock with $(uv run --locked python --version)"
 }
 
+# The zip's contents become the folder's contents. Python's zipfile drops absolute
+# paths and '..' from member names, so nothing lands outside fixtures/.
+unpack_fixtures() {
+    local archive="$1"
+    rm -rf fixtures
+    python3 -m zipfile -e "$archive" fixtures
+    echo "fixtures: unpacked $archive into fixtures/"
+}
+
 check=0
 check_arguments=()
+fixtures_archive=""
 while (($# > 0)); do
     case "$1" in
+        --fixtures)
+            (($# > 1)) || fail "--fixtures needs the path of a zip. $USAGE"
+            [[ -f "$2" ]] || fail "--fixtures names $2, which is not a file"
+            fixtures_archive="$(realpath "$2")"
+            shift 2
+            ;;
         --check)
             check=1
             shift
             check_arguments=("$@")
             break
             ;;
-        *) fail "unknown option $1; the only option is --check [CHECK ARGS...]" ;;
+        *) fail "unknown option $1. $USAGE" ;;
     esac
 done
+
+# Paths given as arguments are resolved above, before leaving the caller's folder.
+cd "$(dirname "$0")/.."
 
 require_disposable_linux
 install_toolchain
 install_dependencies
+if [[ -n "$fixtures_archive" ]]; then
+    unpack_fixtures "$fixtures_archive"
+fi
 if ((check == 1)); then
     echo
     exec bash scripts/check.sh ${check_arguments[@]+"${check_arguments[@]}"}

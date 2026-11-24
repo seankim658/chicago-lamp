@@ -11,3 +11,6 @@ dist/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# Recorded CTA responses for tests. They never enter the repository.
+/fixtures/

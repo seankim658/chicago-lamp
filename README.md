@@ -42,3 +42,9 @@ bash scripts/check.sh --help     # what each option does
 ```
 
 CI runs the same script on every push and pull request.
+
+### Recorded CTA responses
+
+Some tests run on real CTA responses. These are CTA's data, so they never enter the repository. Without them those tests skip, and the check prints how many skipped and why.
+
+To run them, put the recorded responses in `fixtures/` at the repository root, which git ignores, or point `LAMP_FIXTURES_DIR` at another folder.
