@@ -71,11 +71,11 @@ select = [
 python_version = "3.12"
 strict = true
 # scripts/check.sh names the paths and checks each package in its own run.
-mypy_path = "scripts/checks"
+mypy_path = "scripts/checks:scripts"
 
 [tool.pytest]
 testpaths = ["packages", "scripts", "tests"]
-pythonpath = ["scripts/checks"]
+pythonpath = ["scripts/checks", "scripts"]
 addopts = ["--import-mode=importlib", "--strict-markers", "--strict-config", "-ra"]
 xfail_strict = true
 filterwarnings = ["error"]
