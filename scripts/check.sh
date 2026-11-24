@@ -12,6 +12,9 @@ readonly PROJECT="chicago-lamp"
 readonly MANIFEST_GLOB="packages/*/*/pyproject.toml"
 # Lines of a failed step's log shown in the terminal.
 readonly TAIL_LINES=60
+# Paths outside the packages that a full run also type checks.
+MYPY_EXTRA_PATHS=(scripts)
+readonly MYPY_EXTRA_PATHS
 # -----------------------------------------------------------------------------
 
 usage() {
@@ -207,9 +210,15 @@ uv_run() { uv run --locked --all-packages "$@"; }
 lint() { uv_run ruff check --output-format concise "$@"; }
 format_check() { uv_run ruff format --check "$@"; }
 
-# A full run passes ".", which means "use the configured paths".
+# mypy runs once per path. Packages may each hold a test file of the same name,
+# such as conftest.py, and one mypy run refuses two modules with the same name.
 type_check_mypy() {
-    if [[ "$*" == "." ]]; then uv_run mypy; else uv_run mypy "$@"; fi
+    local status=0 path
+    for path in "$@"; do
+        echo "== $path"
+        uv_run mypy "$path" || status=1
+    done
+    return "$status"
 }
 
 # deptry reads the manifest in its working directory, so it runs inside each package.
@@ -253,7 +262,8 @@ run_scoped_steps() {
 run_full_steps() {
     run_step lint "" lint .
     run_step format "" format_check .
-    run_step mypy "" type_check_mypy .
+    run_step mypy "" type_check_mypy ${workspace_folders[@]+"${workspace_folders[@]}"} \
+        "${MYPY_EXTRA_PATHS[@]}"
     run_step deps "" dependency_check ${workspace_folders[@]+"${workspace_folders[@]}"}
 }
 

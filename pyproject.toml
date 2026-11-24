@@ -68,7 +68,7 @@ select = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["packages", "scripts"]
+# scripts/check.sh names the paths and checks each package in its own run.
 mypy_path = "scripts/checks"
 
 [tool.pytest]
