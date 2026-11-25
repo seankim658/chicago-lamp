@@ -8,12 +8,14 @@ from pydantic import ValidationError
 BUS_KEY = "Bus0Key0Bus0Key0Bus0Key0B"
 TRAIN_KEY = "train0key0train0key0train0key012"
 OTHER_KEY = "other0key0other0key0other0key0"
+GTFSRT_KEY = "gtfsrt0key0gtfsrt0key0gtfsrt0k"
 
 
 @pytest.fixture(autouse=True)
 def no_cta_variables(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CTA_BUS_KEY", raising=False)
     monkeypatch.delenv("CTA_TRAIN_KEY", raising=False)
+    monkeypatch.delenv("CTA_GTFSRT_KEY", raising=False)
 
 
 def env_file(tmp_path: Path, text: str) -> Path:
@@ -83,3 +85,19 @@ def test_repr_never_shows_a_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert BUS_KEY not in text
     assert TRAIN_KEY not in text
+
+
+def test_gtfs_realtime_key_is_read_when_set(tmp_path: Path) -> None:
+    path = env_file(
+        tmp_path, f"CTA_BUS_KEY={BUS_KEY}\nCTA_TRAIN_KEY={TRAIN_KEY}\nCTA_GTFSRT_KEY={GTFSRT_KEY}\n"
+    )
+
+    assert Settings(_env_file=path).api_keys().gtfsrt == GTFSRT_KEY
+
+
+def test_an_empty_gtfs_realtime_key_counts_as_unset(tmp_path: Path) -> None:
+    path = env_file(
+        tmp_path, f"CTA_BUS_KEY={BUS_KEY}\nCTA_TRAIN_KEY={TRAIN_KEY}\nCTA_GTFSRT_KEY=\n"
+    )
+
+    assert not Settings(_env_file=path).api_keys().has(KeyKind.GTFSRT)

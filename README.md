@@ -17,10 +17,11 @@ Packages in the same layer never import each other. The check script enforces th
 
 ## Getting CTA keys
 
-The collector needs two keys, and CTA issues them separately.
+The collector needs two keys, and CTA issues them separately. A third is optional.
 
 1. **Bus Tracker key.** Create an account on CTA Bus Tracker, then apply under "Developer API" in your account. See [CTA's Bus Tracker developer page](https://www.transitchicago.com/developers/bustracker/).
-2. **Developer Center key.** This key covers Train Tracker and the GTFS-Realtime feeds. Apply through [CTA's Developer Center](https://www.transitchicago.com/developers/traintracker/).
+2. **Train Tracker key.** Apply through [CTA's Developer Center](https://www.transitchicago.com/developers/traintracker/).
+3. **GTFS-Realtime key (optional).** The Train Tracker key is rejected by the [GTFS-Realtime feeds](https://transitdata.transitchicago.com/). Without `CTA_GTFSRT_KEY` those feeds are skipped.
 
 By default CTA allows 100,000 calls a day on a Bus Tracker key and 50,000 on a Train Tracker key. Copy `.env.example` to `.env` and fill in the keys.
 

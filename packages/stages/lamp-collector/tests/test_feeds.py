@@ -16,7 +16,8 @@ from lamp_collector.keys import ApiKeys, KeyKind
 
 BUS_KEY = "Bus0Key0Bus0Key0Bus0Key0B"
 TRAIN_KEY = "train0key0train0key0train0key012"
-KEYS = ApiKeys(bus=BUS_KEY, train=TRAIN_KEY)
+GTFSRT_KEY = "gtfsrt0key0gtfsrt0key0gtfsrt0k"
+KEYS = ApiKeys(bus=BUS_KEY, train=TRAIN_KEY, gtfsrt=GTFSRT_KEY)
 
 BUS_TRACKER = "https://www.ctabustracker.com/bustime/api/v3"
 GTFS_RT = "https://transitdata.transitchicago.com/GtfsRealtime"
@@ -29,9 +30,9 @@ GTFS_RT = "https://transitdata.transitchicago.com/GtfsRealtime"
         (Feed.BUS_ROUTES, KeyKind.BUS),
         (Feed.BUS_PATTERNS, KeyKind.BUS),
         (Feed.TRAIN_POSITIONS, KeyKind.TRAIN),
-        (Feed.GTFSRT_VEHICLE_POSITIONS, KeyKind.TRAIN),
-        (Feed.GTFSRT_TRIP_UPDATES, KeyKind.TRAIN),
-        (Feed.GTFSRT_SERVICE_ALERTS, KeyKind.TRAIN),
+        (Feed.GTFSRT_VEHICLE_POSITIONS, KeyKind.GTFSRT),
+        (Feed.GTFSRT_TRIP_UPDATES, KeyKind.GTFSRT),
+        (Feed.GTFSRT_SERVICE_ALERTS, KeyKind.GTFSRT),
     ],
 )
 def test_each_feed_uses_its_own_key(feed: Feed, kind: KeyKind) -> None:
@@ -90,8 +91,8 @@ def test_train_positions_asks_for_every_line_by_default() -> None:
         (Feed.GTFSRT_SERVICE_ALERTS, "ServiceAlerts.pb"),
     ],
 )
-def test_gtfs_realtime_urls_use_the_train_key(feed: Feed, file: str) -> None:
-    assert gtfs_realtime(feed).url(KEYS) == f"{GTFS_RT}/{file}?key={TRAIN_KEY}"
+def test_gtfs_realtime_urls_use_the_gtfs_realtime_key(feed: Feed, file: str) -> None:
+    assert gtfs_realtime(feed).url(KEYS) == f"{GTFS_RT}/{file}?key={GTFSRT_KEY}"
 
 
 def test_gtfs_realtime_refuses_a_feed_that_is_not_gtfs_realtime() -> None:

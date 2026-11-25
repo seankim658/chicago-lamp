@@ -3,6 +3,7 @@ from lamp_collector.keys import REDACTED, ApiKeyError, ApiKeys, KeyKind
 
 BUS_KEY = "Bus0Key0Bus0Key0Bus0Key0B"
 TRAIN_KEY = "train0key0train0key0train0key012"
+GTFSRT_KEY = "gtfsrt0key0gtfsrt0key0gtfsrt0k"
 
 
 @pytest.mark.parametrize(
@@ -41,3 +42,27 @@ def test_for_kind_picks_each_key() -> None:
 
     assert keys.for_kind(KeyKind.BUS) == BUS_KEY
     assert keys.for_kind(KeyKind.TRAIN) == TRAIN_KEY
+
+
+def test_gtfs_realtime_key_is_used_when_set() -> None:
+    keys = ApiKeys(bus=BUS_KEY, train=TRAIN_KEY, gtfsrt=GTFSRT_KEY)
+
+    assert keys.has(KeyKind.GTFSRT)
+    assert keys.for_kind(KeyKind.GTFSRT) == GTFSRT_KEY
+    assert keys.redact(f"key={GTFSRT_KEY}") == f"key={REDACTED}"
+    assert GTFSRT_KEY not in repr(keys)
+
+
+def test_gtfs_realtime_key_may_be_left_out() -> None:
+    keys = ApiKeys(bus=BUS_KEY, train=TRAIN_KEY)
+
+    assert keys.has(KeyKind.BUS)
+    assert keys.has(KeyKind.TRAIN)
+    assert not keys.has(KeyKind.GTFSRT)
+    with pytest.raises(ApiKeyError, match="CTA_GTFSRT_KEY is not set"):
+        keys.for_kind(KeyKind.GTFSRT)
+
+
+def test_malformed_gtfs_realtime_key_is_refused() -> None:
+    with pytest.raises(ApiKeyError, match="CTA_GTFSRT_KEY must be"):
+        ApiKeys(bus=BUS_KEY, train=TRAIN_KEY, gtfsrt="short")

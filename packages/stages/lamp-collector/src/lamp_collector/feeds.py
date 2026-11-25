@@ -44,6 +44,8 @@ class Feed(StrEnum):
     def key_kind(self) -> KeyKind:
         if self in _BUS_TRACKER_FEEDS:
             return KeyKind.BUS
+        if self in _GTFS_REALTIME_FILES:
+            return KeyKind.GTFSRT
         return KeyKind.TRAIN
 
     @property

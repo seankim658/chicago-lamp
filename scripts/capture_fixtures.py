@@ -6,7 +6,8 @@ train lines are polled every --interval seconds for --minutes, to show how
 often positions change. The zip holds each body as CTA returned it and
 calls.jsonl with one line per call. Nothing is written if a key appears in it.
 
-Keys come from CTA_BUS_KEY and CTA_TRAIN_KEY, in the environment or in .env.
+Keys come from the environment or .env. GTFS-Realtime is skipped when
+CTA_GTFSRT_KEY is not set.
 """
 
 import argparse
@@ -31,7 +32,7 @@ from lamp_collector.feeds import (
     train_positions,
 )
 from lamp_collector.fetch import Fetcher, FetchResult, cta_client
-from lamp_collector.keys import ApiKeys
+from lamp_collector.keys import ApiKeys, KeyKind
 from lamp_collector.settings import Settings
 from pydantic import ValidationError
 
@@ -59,8 +60,9 @@ class Call:
 class Capture:
     """Fetch requests and keep every result, in order."""
 
-    def __init__(self, fetcher: Fetcher) -> None:
+    def __init__(self, fetcher: Fetcher, include_gtfsrt: bool = True) -> None:
         self._fetcher = fetcher
+        self.include_gtfsrt = include_gtfsrt
         self.calls: list[Call] = []
 
     def fetch(self, request: FeedRequest, label: str) -> FetchResult:
@@ -98,8 +100,9 @@ def capture_once(capture: Capture) -> list[str]:
     for batch in batches(pattern_ids(vehicles)):
         capture.fetch(bus_patterns(batch), "every pattern seen")
     capture_train_forms(capture)
-    for feed in GTFS_REALTIME_FEEDS:
-        capture.fetch(gtfs_realtime(feed), "once")
+    if capture.include_gtfsrt:
+        for feed in GTFS_REALTIME_FEEDS:
+            capture.fetch(gtfs_realtime(feed), "once")
     return routes[:MAX_IDS_PER_CALL]
 
 
@@ -263,8 +266,11 @@ def main(argv: Sequence[str]) -> int:
     except ValidationError as error:
         sys.stderr.write(f"{error}\n")
         return 2
+    include_gtfsrt = keys.has(KeyKind.GTFSRT)
+    if not include_gtfsrt:
+        sys.stdout.write("skipping GTFS-Realtime, CTA_GTFSRT_KEY is not set\n")
     with cta_client() as client:
-        capture = Capture(Fetcher(client, keys))
+        capture = Capture(Fetcher(client, keys), include_gtfsrt)
         status = run(capture, arguments.minutes, arguments.interval)
     members = fixture_members(capture.calls)
     leaks = leaked_keys(members, keys)

@@ -26,7 +26,8 @@ from lamp_collector.keys import ApiKeys
 
 BUS_KEY = "Bus0Key0Bus0Key0Bus0Key0B"
 TRAIN_KEY = "train0key0train0key0train0key012"
-KEYS = ApiKeys(bus=BUS_KEY, train=TRAIN_KEY)
+GTFSRT_KEY = "gtfsrt0key0gtfsrt0key0gtfsrt0k"
+KEYS = ApiKeys(bus=BUS_KEY, train=TRAIN_KEY, gtfsrt=GTFSRT_KEY)
 NOW = datetime(2026, 11, 23, 15, 0, 0, tzinfo=UTC)
 ROUTES = [str(number) for number in range(1, 13)]
 
@@ -51,9 +52,9 @@ def fake_cta(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, content=b"\x0a\x00")
 
 
-def capture_with(handler: httpx.MockTransport) -> Capture:
+def capture_with(handler: httpx.MockTransport, include_gtfsrt: bool = True) -> Capture:
     client = httpx.Client(transport=handler)
-    return Capture(Fetcher(client, KEYS, clock=lambda: NOW))
+    return Capture(Fetcher(client, KEYS, clock=lambda: NOW), include_gtfsrt)
 
 
 def result(body: bytes | None, status: int | None = 200) -> FetchResult:
@@ -80,6 +81,16 @@ def test_capture_once_calls_every_feed_and_returns_the_first_batch() -> None:
         "TripUpdates.pb",
         "ServiceAlerts.pb",
     ]
+
+
+def test_capture_once_skips_gtfs_realtime_when_asked() -> None:
+    capture = capture_with(httpx.MockTransport(fake_cta), include_gtfsrt=False)
+
+    capture_once(capture)
+
+    feeds = {call.result.request.feed.value for call in capture.calls}
+    assert not any(feed.startswith("gtfsrt_") for feed in feeds)
+    assert "train_positions" in feeds
 
 
 def test_capture_rates_polls_buses_and_trains_on_every_tick() -> None:
