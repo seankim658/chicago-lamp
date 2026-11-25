@@ -20,7 +20,7 @@ from capture_fixtures import (
     route_ids,
     write_zip,
 )
-from lamp_collector.feeds import bus_routes, bus_vehicles
+from lamp_collector.feeds import FeedRequest, bus_routes, bus_vehicles
 from lamp_collector.fetch import Fetcher, FetchResult
 from lamp_collector.keys import ApiKeys
 
@@ -30,6 +30,7 @@ GTFSRT_KEY = "gtfsrt0key0gtfsrt0key0gtfsrt0k"
 KEYS = ApiKeys(bus=BUS_KEY, train=TRAIN_KEY, gtfsrt=GTFSRT_KEY)
 NOW = datetime(2026, 11, 23, 15, 0, 0, tzinfo=UTC)
 ROUTES = [str(number) for number in range(1, 13)]
+ROUTES_REQUEST = bus_routes()
 
 
 def bustime(body: dict[str, object]) -> bytes:
@@ -57,8 +58,10 @@ def capture_with(handler: httpx.MockTransport, include_gtfsrt: bool = True) -> C
     return Capture(Fetcher(client, KEYS, clock=lambda: NOW), include_gtfsrt)
 
 
-def result(body: bytes | None, status: int | None = 200) -> FetchResult:
-    return FetchResult(bus_routes(), NOW, http_status=status, body=body)
+def result(
+    body: bytes | None, status: int | None = 200, request: FeedRequest = ROUTES_REQUEST
+) -> FetchResult:
+    return FetchResult(request, NOW, http_status=status, body=body)
 
 
 def test_capture_once_calls_every_feed_and_returns_the_first_batch() -> None:
@@ -128,10 +131,15 @@ def test_route_ids_reads_getroutes() -> None:
 @pytest.mark.parametrize(
     ("body", "status", "message"),
     [
-        (None, None, "got status None"),
-        (b"busy", 503, "got status 503"),
-        (b"<xml/>", 200, "invalid JSON"),
-        (bustime({"error": [{"msg": "Invalid API access key supplied"}]}), 200, "no routes"),
+        (None, None, "http_error: HTTP status None"),
+        (b"busy", 503, "http_error: HTTP status 503"),
+        (b"<xml/>", 200, "parse_error: body is not JSON"),
+        (bustime({"routes": []}), 200, "parse_error: getroutes listed no routes"),
+        (
+            bustime({"error": [{"msg": "Invalid API access key supplied"}]}),
+            200,
+            "api_error: Invalid API access key supplied",
+        ),
     ],
 )
 def test_route_ids_refuses_an_unusable_response(
@@ -142,14 +150,19 @@ def test_route_ids_refuses_an_unusable_response(
 
 
 def test_pattern_ids_collects_distinct_ids_and_skips_unusable_responses() -> None:
+    vehicles = bus_vehicles(["1"])
     results = [
-        result(bustime({"vehicle": [{"pid": 5}, {"pid": 7}]})),
-        result(bustime({"vehicle": [{"pid": 5}, {"vid": "1"}]})),
-        result(bustime({"error": [{"rt": "N5", "msg": "No data found for parameter"}]})),
-        result(None, None),
+        result(bustime({"vehicle": [{"pid": 5}, {"pid": 7}]}), request=vehicles),
+        result(bustime({"vehicle": [{"pid": 5}, {"pid": 9}]}), request=vehicles),
+        result(bustime({"vehicle": [{"pid": "11"}]}), request=vehicles),
+        result(
+            bustime({"error": [{"rt": "N5", "msg": "No data found for parameter"}]}),
+            request=vehicles,
+        ),
+        result(None, None, request=vehicles),
     ]
 
-    assert pattern_ids(results) == ["5", "7"]
+    assert pattern_ids(results) == ["5", "7", "9"]
 
 
 def test_fixture_members_store_bodies_by_feed_and_index_every_call() -> None:

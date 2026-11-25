@@ -33,6 +33,7 @@ from lamp_collector.feeds import (
 )
 from lamp_collector.fetch import Fetcher, FetchResult, cta_client
 from lamp_collector.keys import ApiKeys, KeyKind
+from lamp_collector.responses import Status, read_response
 from lamp_collector.settings import Settings
 from pydantic import ValidationError
 
@@ -128,52 +129,19 @@ def batches(ids: Sequence[str]) -> list[list[str]]:
 
 
 def route_ids(result: FetchResult) -> list[str]:
-    """Read the route IDs from a getroutes response."""
-    routes = _field(_bustime_response(result), "routes")
-    if not isinstance(routes, list) or not routes:
-        raise CaptureError(f"getroutes listed no routes, got routes={routes!r}")
-    ids: list[str] = []
-    for route in routes:
-        route_id = _field(route, "rt")
-        if not isinstance(route_id, str):
-            raise CaptureError(f"getroutes gave a route without a text rt: {route!r}")
-        ids.append(route_id)
-    return ids
+    """Read the route IDs from a getroutes response, which the rest of the capture needs."""
+    reading = read_response(result)
+    if reading.status is not Status.OK:
+        raise CaptureError(f"getroutes gave {reading.status.value}: {reading.error}")
+    return list(reading.route_ids)
 
 
 def pattern_ids(results: Sequence[FetchResult]) -> list[str]:
-    """Return every distinct pattern ID the vehicles in these responses report."""
+    """Return every distinct pattern ID the buses in these responses are on."""
     found: set[str] = set()
     for result in results:
-        try:
-            vehicles = _field(_bustime_response(result), "vehicle")
-        except CaptureError:
-            continue
-        if not isinstance(vehicles, list):
-            continue
-        for vehicle in vehicles:
-            pattern = _field(vehicle, "pid")
-            if pattern is not None:
-                found.add(str(pattern))
+        found.update(read_response(result).pattern_ids)
     return sorted(found)
-
-
-def _bustime_response(result: FetchResult) -> object:
-    if result.http_status != 200 or result.body is None:
-        raise CaptureError(
-            f"{result.request.public_url} got status {result.http_status}, error {result.error}"
-        )
-    try:
-        document: object = json.loads(result.body)
-    except ValueError as error:
-        raise CaptureError(f"{result.request.public_url} returned invalid JSON: {error}") from None
-    return _field(document, "bustime-response")
-
-
-def _field(document: object, name: str) -> object:
-    if not isinstance(document, dict):
-        return None
-    return document.get(name)
 
 
 def fixture_members(calls: Sequence[Call]) -> list[Member]:
