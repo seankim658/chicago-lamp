@@ -96,8 +96,10 @@ class LocalStore:
 
     def list_keys(self, prefix: str = "") -> Iterator[str]:
         validate_prefix(prefix)
+        # Only the folder named by the prefix's whole segments can hold a match.
+        start = self._root.joinpath(*prefix.split("/")[:-1])
         keys: list[str] = []
-        for folder, subfolders, files in self._root.walk():
+        for folder, subfolders, files in start.walk():
             subfolders[:] = [name for name in subfolders if not name.startswith(".")]
             for name in files:
                 key = (folder / name).relative_to(self._root).as_posix()

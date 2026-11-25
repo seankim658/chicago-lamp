@@ -89,6 +89,17 @@ def test_list_keys_returns_sorted_keys_under_the_prefix(store: Store) -> None:
     ]
 
 
+def test_list_keys_with_a_deep_prefix_returns_only_keys_under_it(store: Store) -> None:
+    for key in ["raw/b/2", "raw/a/1", "raw/b/1", "raw/bb/3"]:
+        store.put(key, b"x")
+
+    assert list(store.list_keys("raw/b/")) == ["raw/b/1", "raw/b/2"]
+    assert list(store.list_keys("raw/b")) == ["raw/b/1", "raw/b/2", "raw/bb/3"]
+    assert list(store.list_keys("raw/b/1")) == ["raw/b/1"]
+    assert list(store.list_keys("raw/c/")) == []
+    assert list(store.list_keys("raw/b/1/")) == []
+
+
 def test_list_keys_of_an_empty_store_is_empty(store: Store) -> None:
     assert list(store.list_keys()) == []
 
