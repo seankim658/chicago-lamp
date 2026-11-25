@@ -12,12 +12,15 @@ from .keys import ApiKeys
 
 Clock = Callable[[], datetime]
 
+# The longest a call waits to connect, or between parts of a response.
+TIMEOUT_SECONDS = 10.0
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def cta_client(timeout_seconds: float = 10.0) -> httpx.Client:
+def cta_client(timeout_seconds: float = TIMEOUT_SECONDS) -> httpx.Client:
     return httpx.Client(timeout=timeout_seconds, headers={"User-Agent": "chicago-lamp"})
 
 
