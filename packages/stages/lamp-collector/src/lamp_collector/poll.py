@@ -1,5 +1,6 @@
 """One poll of one feed, from its calls to their raw files and journal rows."""
 
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -9,6 +10,8 @@ from .fetch import Clock, Fetcher, FetchResult, utc_now
 from .journal import CallRecord, JournalWriter
 from .raw import CallId, RawWriter
 from .responses import Status, read_response
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -51,9 +54,9 @@ class Recorder:
 class PollRunner:
     """Make every call of a poll at the same time, so one slow call can't delay the rest.
 
-    A call that is not ok is tried once more, if retry_by has not passed. A
-    storage failure is raised once every call has finished, so the other calls
-    are still saved.
+    A call that is not ok is logged and tried once more, if retry_by has not
+    passed. A storage failure is raised once every call has finished, so the
+    other calls are still saved.
     """
 
     def __init__(self, fetcher: Fetcher, recorder: Recorder, clock: Clock = utc_now) -> None:
@@ -77,4 +80,15 @@ class PollRunner:
 
     def _attempt(self, poll: Poll, index: int, attempt: int) -> CallRecord:
         call = CallId(poll.poll_time_utc, index, attempt)
-        return self._recorder.record(call, self._fetcher.fetch(poll.requests[index]))
+        record = self._recorder.record(call, self._fetcher.fetch(poll.requests[index]))
+        if record.reading.status is not Status.OK:
+            logger.warning(
+                "%s poll at %s, call %d, attempt %d: %s: %s",
+                record.result.request.feed,
+                poll.poll_time_utc.isoformat(),
+                index,
+                attempt,
+                record.reading.status,
+                record.reading.error,
+            )
+        return record

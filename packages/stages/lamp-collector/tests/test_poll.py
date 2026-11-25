@@ -92,6 +92,19 @@ def test_a_call_that_fails_twice_is_not_tried_a_third_time(store: LocalStore) ->
     assert statuses(outcome) == [Status.API_ERROR, Status.API_ERROR]
 
 
+def test_each_failed_attempt_is_logged_with_its_error(
+    store: LocalStore, caplog: pytest.LogCaptureFixture
+) -> None:
+    handler = answers(httpx.Response(200, content=BUS_ERROR), httpx.Response(200, content=BUS_OK))
+
+    runner(store, handler).run(poll(bus_vehicles(["1"])))
+
+    assert caplog.messages == [
+        "bus_vehicles poll at 2026-11-25T04:30:00+00:00, call 0, attempt 1: "
+        "api_error: Internal server error"
+    ]
+
+
 def test_a_call_that_got_no_response_is_retried_and_saves_no_raw_file(store: LocalStore) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("refused", request=request)
