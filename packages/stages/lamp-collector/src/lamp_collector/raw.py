@@ -7,15 +7,17 @@ the poll, and the file name is its UTC time.
 
 import gzip
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from lamp_storage import Store
 
-from .feeds import Feed
+from .feeds import Feed, FeedRequest
 from .fetch import FetchResult
+from .responses import Reading, read_response
 
 CHICAGO = ZoneInfo("America/Chicago")
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 # The call index is written with two digits.
 MAX_CALLS_PER_POLL = 100
@@ -81,6 +83,18 @@ class RawWriter:
         key = raw_key(result.request.feed, call)
         self._store.put_new(key, gzip.compress(result.body, mtime=0))
         return key
+
+
+def read_saved(store: Store, key: str) -> Reading:
+    """Read a saved raw response as if it had just arrived with HTTP status 200.
+
+    The feed comes from the key's folder. A body saved from an error status
+    reads as an error, since it isn't what the feed returns.
+    """
+    feed = Feed(key.split("/")[1])
+    body = gzip.decompress(store.get(key))
+    result = FetchResult(FeedRequest(feed, ""), _EPOCH, _EPOCH, http_status=200, body=body)
+    return read_response(result)
 
 
 def _check_poll_time(poll_time: datetime) -> None:
