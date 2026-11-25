@@ -1,6 +1,7 @@
 import errno
 import os
 import tempfile
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -14,10 +15,17 @@ class LocalStore:
     Each write goes to a temporary dot-file beside its target, is flushed to disk,
     and then takes the target's name in one step, so a reader never sees half a
     file. Folders are created as needed and removed when deleting leaves them empty.
+
+    Lines can also be appended to an object. Each line is flushed to disk before
+    append_line returns. A crash during an append can leave half a line at the
+    end, which the next append to that object drops, or drop_torn_line on its own.
+    Appends through one store are safe from many threads. Separate stores on the
+    same folder do not coordinate their appends.
     """
 
     def __init__(self, root: Path) -> None:
         self._root = root.resolve()
+        self._append_lock = threading.Lock()
 
     def put(self, key: str, data: bytes) -> None:
         path = self._path(key)
@@ -36,6 +44,45 @@ class LocalStore:
             temporary.unlink()
         _sync_folder(path.parent)
         return True
+
+    def append_line(self, key: str, line: bytes) -> None:
+        """Add line and a newline to the end of the object, creating it if missing.
+
+        Raise ValueError when line is empty or holds a newline. When the write
+        fails, the object is left as it was.
+        """
+        _check_line(line)
+        path = self._path(key)
+        with self._append_lock:
+            created = not path.exists()
+            _make_parent(path)
+            descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+            try:
+                self._append(descriptor, key, line)
+            finally:
+                os.close(descriptor)
+            if created:
+                _sync_folder(path.parent)
+
+    def drop_torn_line(self, key: str) -> bool:
+        """Cut an appended object back to its last whole line.
+
+        Return True when there was half a line to drop. A missing object is left
+        missing.
+        """
+        path = self._path(key)
+        with self._append_lock:
+            try:
+                descriptor = os.open(path, os.O_RDWR)
+            except FileNotFoundError:
+                return False
+            try:
+                size = os.fstat(descriptor).st_size
+                dropped = _drop_torn_line(descriptor) < size
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        return dropped
 
     def get(self, key: str) -> bytes:
         path = self._path(key)
@@ -66,11 +113,17 @@ class LocalStore:
     def _path(self, key: str) -> Path:
         return self._root.joinpath(*validate_key(key).split("/"))
 
-    def _write_temporary(self, path: Path, data: bytes) -> Path:
+    def _append(self, descriptor: int, key: str, line: bytes) -> None:
+        size = _drop_torn_line(descriptor)
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        except (FileExistsError, NotADirectoryError):
-            raise StorageError(f"cannot write {path}, a parent of it is a file") from None
+            _write_all(descriptor, line + b"\n")
+            os.fsync(descriptor)
+        except OSError as error:
+            os.ftruncate(descriptor, size)
+            raise StorageError(f"cannot append to {key!r} in {self._root}: {error}") from error
+
+    def _write_temporary(self, path: Path, data: bytes) -> Path:
+        _make_parent(path)
         descriptor, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
         with os.fdopen(descriptor, "wb") as file:
             file.write(data)
@@ -94,6 +147,36 @@ class LocalStore:
                     return
                 raise
             folder = folder.parent
+
+
+def _make_parent(path: Path) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except (FileExistsError, NotADirectoryError):
+        raise StorageError(f"cannot write {path}, a parent of it is a file") from None
+
+
+def _check_line(line: bytes) -> None:
+    if not line:
+        raise ValueError("an appended line must not be empty")
+    if b"\n" in line:
+        raise ValueError(f"an appended line must not hold a newline, got {line[:80]!r}")
+
+
+def _drop_torn_line(descriptor: int) -> int:
+    """Cut the file back to its last whole line, and return its size."""
+    size = os.fstat(descriptor).st_size
+    if size == 0 or os.pread(descriptor, 1, size - 1) == b"\n":
+        return size
+    whole = os.pread(descriptor, size, 0).rfind(b"\n") + 1
+    os.ftruncate(descriptor, whole)
+    return whole
+
+
+def _write_all(descriptor: int, data: bytes) -> None:
+    view = memoryview(data)
+    while view:
+        view = view[os.write(descriptor, view) :]
 
 
 def _sync_folder(folder: Path) -> None:
