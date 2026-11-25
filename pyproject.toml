@@ -19,6 +19,7 @@ dev = [
     "pytest-xdist>=3.8",
     "ruff>=0.17",
     "types-boto3[s3]>=1.44.9",
+    "types-protobuf>=7.35.1.20261122",
 ]
 
 # Architecture layers, lowest first. A package's layer is the folder it sits in.
@@ -46,6 +47,18 @@ package = "python-dateutil"
 version = "2.9.0.post0"
 license = "Apache-2.0 AND BSD-3-Clause"
 reason = "Metadata says Dual License. Its LICENSE puts all code under BSD-3-Clause and code since 2017-12-01 under Apache-2.0 too."
+
+[[tool.chicago-lamp.licenses.reviewed]]
+package = "gtfs-realtime-bindings"
+version = "3.0.0"
+license = "Apache-2.0"
+reason = "Metadata says Apache License, Version 2.0, which is not an SPDX ID, and the wheel ships no license file. Its classifier and the MobilityData repository's LICENSE are Apache-2.0."
+
+[[tool.chicago-lamp.licenses.reviewed]]
+package = "protobuf"
+version = "7.36.2"
+license = "BSD-3-Clause"
+reason = "Metadata says 3-Clause BSD License, which is not an SPDX ID. Its LICENSE is the BSD-3-Clause text."
 
 [[tool.chicago-lamp.licenses.reviewed]]
 package = "s3transfer"
