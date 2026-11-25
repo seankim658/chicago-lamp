@@ -668,6 +668,7 @@ source = { editable = "packages/stages/lamp-collector" }
 dependencies = [
     { name = "gtfs-realtime-bindings" },
     { name = "httpx" },
+    { name = "lamp-storage" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
 ]
@@ -676,6 +677,7 @@ dependencies = [
 requires-dist = [
     { name = "gtfs-realtime-bindings", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "lamp-storage", editable = "packages/shared/lamp-storage" },
     { name = "pydantic", specifier = ">=2.14.4" },
     { name = "pydantic-settings", specifier = ">=2.16.3" },
 ]

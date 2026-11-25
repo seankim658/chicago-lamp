@@ -6,9 +6,13 @@ requires-python = ">=3.12"
 dependencies = [
     "gtfs-realtime-bindings>=3.0.0",
     "httpx>=0.28.1",
+    "lamp-storage",
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
 ]
+
+[tool.uv.sources]
+lamp-storage = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.13,<0.14"]
