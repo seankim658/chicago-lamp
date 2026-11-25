@@ -142,7 +142,7 @@ def test_a_poll_that_raises_is_logged_and_the_next_poll_still_runs(
     assert "listener broke" in caplog.text
 
 
-def test_a_poll_with_no_calls_is_skipped_with_a_warning(caplog: pytest.LogCaptureFixture) -> None:
+def test_a_poll_with_no_calls_is_skipped_quietly(caplog: pytest.LogCaptureFixture) -> None:
     pacer = FakePacer(START, polls=1)
     runner = FakeRunner(pacer)
     no_calls: tuple[FeedRequest, ...] = ()
@@ -151,7 +151,7 @@ def test_a_poll_with_no_calls_is_skipped_with_a_warning(caplog: pytest.LogCaptur
     FeedLoop(schedule, runner, pacer).run()
 
     assert runner.polls == []
-    assert "bus_vehicles poll at 2026-11-25T04:30:30+00:00 has no calls to make" in caplog.text
+    assert caplog.text == ""
 
 
 def test_waiting_for_a_moment_already_past_returns_at_once() -> None:

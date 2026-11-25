@@ -32,7 +32,8 @@ class FeedSchedule:
     """How often a feed is polled, and the calls each poll makes.
 
     requests is asked afresh for every poll, so it can follow a list that
-    changes, such as the bus routes. A poll with no calls is skipped.
+    changes, such as the bus routes. A poll with no calls is skipped quietly,
+    so a feed that has nothing to ask for says so itself.
     """
 
     feed: Feed
@@ -60,6 +61,11 @@ PollListener = Callable[[PollReport], None]
 def next_poll_time(now: datetime, interval: timedelta) -> datetime:
     """The first poll time strictly after now."""
     return _EPOCH + ((now - _EPOCH) // interval + 1) * interval
+
+
+def retry_deadline(poll_time: datetime, interval: timedelta) -> datetime:
+    """The last moment a retry can start and still finish before the next poll."""
+    return poll_time + interval - _RETRY_MARGIN
 
 
 class Pacer:
@@ -120,11 +126,8 @@ class FeedLoop:
     def _poll(self, poll_time: datetime) -> None:
         requests = self._schedule.requests()
         if not requests:
-            logger.warning(
-                "%s poll at %s has no calls to make", self._schedule.feed, poll_time.isoformat()
-            )
             return
-        retry_by = poll_time + self._schedule.interval - _RETRY_MARGIN
+        retry_by = retry_deadline(poll_time, self._schedule.interval)
         outcomes = self._runner.run(Poll(poll_time, requests, retry_by))
         report = PollReport(self._schedule.feed, poll_time, outcomes)
         for listener in self._listeners:
