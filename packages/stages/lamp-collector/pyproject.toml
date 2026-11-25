@@ -11,6 +11,9 @@ dependencies = [
     "pydantic-settings>=2.16.3",
 ]
 
+[project.scripts]
+lamp-collector = "lamp_collector.cli:main"
+
 [tool.uv.sources]
 lamp-storage = { workspace = true }
 

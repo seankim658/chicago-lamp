@@ -122,6 +122,14 @@ def test_a_failed_getroutes_poll_keeps_the_old_list(
     assert "got no route list, so the old one is kept" in caplog.text
 
 
+def test_a_failed_getroutes_poll_with_no_list_yet_says_so(
+    store: LocalStore, caplog: pytest.LogCaptureFixture
+) -> None:
+    BusRoutes(store).listen(routes_report(Reading(Status.TIMEOUT, error="ReadTimeout")))
+
+    assert "got no route list, and none is loaded yet" in caplog.text
+
+
 def test_startup_polls_getroutes_every_30_seconds_until_a_list_arrives(
     store: LocalStore,
 ) -> None:

@@ -81,6 +81,10 @@ class Pacer:
     def stop(self) -> None:
         self._stopped.set()
 
+    def wait_stopped(self, seconds: float) -> bool:
+        """Return True once stop has been called, or False after seconds pass first."""
+        return self._stopped.wait(seconds)
+
     def wait_until(self, moment: datetime) -> bool:
         """Return True once moment has come, or False as soon as stop is called."""
         while (remaining := (moment - self._clock()).total_seconds()) > 0:

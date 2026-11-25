@@ -55,9 +55,9 @@ class BusRoutes:
             if reading.status is Status.OK and reading.route_ids:
                 self._replace(reading.route_ids, f"poll at {report.poll_time_utc.isoformat()}")
                 return
+        kept = "so the old one is kept" if self.loaded else "and none is loaded yet"
         logger.warning(
-            "the getroutes poll at %s got no route list, so the old one is kept",
-            report.poll_time_utc.isoformat(),
+            "the getroutes poll at %s got no route list, %s", report.poll_time_utc.isoformat(), kept
         )
 
     def requests(self) -> tuple[FeedRequest, ...]:

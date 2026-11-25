@@ -4,6 +4,7 @@ Environment variables win over .env, and an empty value counts as unset.
 Validation errors never show input values, since the input holds keys.
 """
 
+from pathlib import Path
 from typing import Self
 
 from pydantic import SecretStr, model_validator
@@ -32,3 +33,9 @@ class Settings(BaseSettings):
             train=self.cta_train_key.get_secret_value(),
             gtfsrt=None if self.cta_gtfsrt_key is None else self.cta_gtfsrt_key.get_secret_value(),
         )
+
+
+class CollectorSettings(Settings):
+    """Settings for a running collector, which also needs its buffer folder."""
+
+    lamp_buffer_dir: Path

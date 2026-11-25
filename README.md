@@ -25,6 +25,16 @@ The collector needs two keys, and CTA issues them separately. A third is optiona
 
 By default CTA allows 100,000 calls a day on a Bus Tracker key and 50,000 on a Train Tracker key. Copy `.env.example` to `.env` and fill in the keys.
 
+## Running the collector
+
+With `.env` filled in, start the collector from the folder that holds it.
+
+```bash
+.venv/bin/lamp-collector run
+```
+
+It polls every feed until it gets SIGINT or SIGTERM, and writes each response and its coverage row under `LAMP_BUFFER_DIR`. Run the installed command rather than `uv run lamp-collector`, because `uv run` doesn't pass a stop signal on, so the collector can't finish its current polls.
+
 ## Development
 
 Install [uv](https://docs.astral.sh/uv/), then set up the workspace.
