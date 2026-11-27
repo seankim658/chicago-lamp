@@ -152,9 +152,12 @@ Every 2 minutes, a health check reads the buffer and reports to [Healthchecks.io
 cd /opt/chicago-lamp
 git pull
 UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy \
-    uv sync --locked --no-dev --package lamp-collector --no-editable --python /usr/bin/python3.12
+    uv sync --locked --no-dev --package lamp-collector --no-editable --python /usr/bin/python3.12 \
+    --reinstall-package lamp-collector --reinstall-package lamp-storage
 sudo systemctl restart chicago-lamp-collector
 ```
+
+The project's own packages keep version 0.0.0, so without `--reinstall-package` uv sees them as already installed and keeps the old code. The `uv sync` output must list both packages with a `~` in front.
 
 A restart misses a poll or two of each feed, so update only when there is something to ship. If a unit file changed, install it again as in step 7 or step 10 and run `sudo systemctl daemon-reload` before restarting. The health check runs the new code on its next run, with nothing to restart.
 
