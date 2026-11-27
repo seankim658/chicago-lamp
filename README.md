@@ -35,6 +35,8 @@ With `.env` filled in, start the collector from the folder that holds it.
 
 It polls every feed until it gets SIGINT or SIGTERM, and writes each response and its coverage row under `LAMP_BUFFER_DIR`. Run the installed command rather than `uv run lamp-collector`, because `uv run` doesn't pass a stop signal on, so the collector can't finish its current polls.
 
+To run it as a service on a server, follow [deploy/README.md](deploy/README.md).
+
 ## Development
 
 Install [uv](https://docs.astral.sh/uv/), then set up the workspace.
