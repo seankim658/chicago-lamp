@@ -1,0 +1,13 @@
+# Runs the health check every 2 minutes. deploy/README.md says how to install it.
+
+[Unit]
+Description=Run the Chicago LAMP health check every 2 minutes
+Documentation=file:/opt/chicago-lamp/deploy/README.md
+
+[Timer]
+OnCalendar=*:0/2
+# systemd may otherwise delay a run by up to a minute, which is half the period.
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
