@@ -1,0 +1,49 @@
+# The collector as a systemd service. deploy/README.md says how to install it.
+
+[Unit]
+Description=Chicago LAMP collector
+Documentation=file:/opt/chicago-lamp/deploy/README.md
+Wants=network-online.target
+After=network-online.target time-sync.target
+# Never stop restarting, however often it fails. A day not collected is lost.
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=chicago-lamp
+Group=chicago-lamp
+ExecStart=/opt/chicago-lamp/.venv/bin/lamp-collector run
+EnvironmentFile=/etc/chicago-lamp/collector.env
+
+# systemd creates /var/lib/chicago-lamp, owned by the service user. The
+# collector also reads .env from its working folder, and nobody else can write
+# here, so no stray .env can override the settings.
+StateDirectory=chicago-lamp
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/chicago-lamp
+UMask=0077
+
+# Exit status 2 means the settings are wrong, which a restart can't fix.
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=2
+# Polls in progress finish before the collector exits, which takes up to
+# about 20 seconds.
+TimeoutStopSec=60
+
+# The collector only makes outgoing HTTPS calls and writes its own folder.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
