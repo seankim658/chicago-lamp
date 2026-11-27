@@ -82,7 +82,7 @@ sudo systemctl enable --now chicago-lamp-collector
 
 ```bash
 systemctl status chicago-lamp-collector
-journalctl -u chicago-lamp-collector -f
+sudo journalctl -u chicago-lamp-collector -f
 ```
 
 Within a minute the log shows a line for each feed it polls, the number of bus routes loaded, and then a warning for each call that fails. Ten minutes in, it writes one summary line per feed. Stop following the log with Ctrl-C, which leaves the service running.
@@ -160,7 +160,7 @@ A restart misses a poll or two of each feed, so update only when there is someth
 
 ## When something goes wrong
 
-- **The service stopped and stays stopped.** Its settings are missing or malformed. `journalctl -u chicago-lamp-collector -n 20` names the setting, never its value. Fix `/etc/chicago-lamp/collector.env`, then run `sudo systemctl restart chicago-lamp-collector`.
+- **The service stopped and stays stopped.** Its settings are missing or malformed. `sudo journalctl -u chicago-lamp-collector -n 20 --no-pager` names the setting, never its value. Fix `/etc/chicago-lamp/collector.env`, then run `sudo systemctl restart chicago-lamp-collector`.
 - **The service keeps restarting.** A feed's thread died, or it can't start at all. The log line before each start says why. It restarts every 5 seconds and never gives up.
 - **Stopping takes a while.** Polls in progress finish first, which takes up to about 20 seconds.
 - **An alert says a feed has no successful poll.** Run `sudo journalctl -u chicago-lamp-collector --since '-20min' --no-pager` and look at the warnings for that feed. If the collector is running and every call fails, CTA's side or the key is the likely cause.
