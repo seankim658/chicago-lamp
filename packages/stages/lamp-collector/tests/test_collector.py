@@ -9,7 +9,8 @@ from pathlib import Path
 import httpx
 import pytest
 from google.transit import gtfs_realtime_pb2
-from lamp_collector.collector import Collector, Services
+from lamp_collector.collector import Collector, Services, polled_feeds, steady_feeds
+from lamp_collector.feeds import Feed
 from lamp_collector.fetch import Fetcher
 from lamp_collector.journal import JournalWriter
 from lamp_collector.keys import ApiKeys
@@ -168,3 +169,24 @@ def test_a_feed_thread_that_dies_stops_the_collector_with_an_error(
 
     assert run_until(target, never) == [False]
     assert "the train_positions thread died, so the collector is stopping" in caplog.text
+
+
+def test_gtfs_realtime_feeds_are_polled_only_with_their_key() -> None:
+    assert {feed.value for feed in polled_feeds(KEYS)} == {
+        "bus_vehicles",
+        "bus_routes",
+        "bus_patterns",
+        "train_positions",
+    }
+    assert {feed.value for feed in polled_feeds(KEYS_WITH_GTFSRT)} >= GTFSRT_FEEDS
+
+
+def test_route_lists_and_pattern_definitions_are_not_steady_feeds() -> None:
+    assert steady_feeds(KEYS) == {Feed.BUS_VEHICLES, Feed.TRAIN_POSITIONS}
+    assert steady_feeds(KEYS_WITH_GTFSRT) == {
+        Feed.BUS_VEHICLES,
+        Feed.TRAIN_POSITIONS,
+        Feed.GTFSRT_VEHICLE_POSITIONS,
+        Feed.GTFSRT_TRIP_UPDATES,
+        Feed.GTFSRT_SERVICE_ALERTS,
+    }

@@ -45,6 +45,19 @@ _OCCASIONAL_FEEDS = frozenset({Feed.BUS_ROUTES, Feed.BUS_PATTERNS})
 _WAKE_SECONDS = 1.0
 
 
+def polled_feeds(keys: ApiKeys) -> tuple[Feed, ...]:
+    """The feeds a collector with these keys polls."""
+    return tuple(feed for feed in INTERVALS if keys.has(feed.key_kind))
+
+
+def steady_feeds(keys: ApiKeys) -> frozenset[Feed]:
+    """The polled feeds that poll every few minutes or faster.
+
+    Any quiet spell in one of these is a gap. The rest poll only now and then.
+    """
+    return frozenset(polled_feeds(keys)) - _OCCASIONAL_FEEDS
+
+
 @dataclass(frozen=True)
 class Services:
     """What every feed shares: the buffer, the way polls are run, and the clock."""
@@ -57,13 +70,10 @@ class Services:
 class Collector:
     def __init__(self, services: Services, keys: ApiKeys) -> None:
         self._services = services
-        self._feeds = tuple(feed for feed in INTERVALS if keys.has(feed.key_kind))
+        self._feeds = polled_feeds(keys)
         self._routes = BusRoutes(services.store)
         self._patterns = PatternTracker(services.store)
-        self._listeners: tuple[PollListener, ...] = (
-            CallBudget(),
-            PollSummary(set(self._feeds) - _OCCASIONAL_FEEDS),
-        )
+        self._listeners: tuple[PollListener, ...] = (CallBudget(), PollSummary(steady_feeds(keys)))
         self._threads: list[threading.Thread] = []
         self._threads_lock = threading.Lock()
         self._failed = threading.Event()
