@@ -11,19 +11,23 @@ import httpx
 from lamp_storage import LocalStore
 from pydantic import ValidationError
 
-from .collector import Collector, Services
-from .fetch import Fetcher, cta_client
+from .collector import Collector, Services, steady_feeds
+from .fetch import Fetcher, cta_client, utc_now
+from .health import HealthCheck
+from .heartbeat import HeartbeatError, heartbeat_client, send_heartbeat
 from .journal import JournalWriter
 from .logs import configure_logging
 from .poll import PollRunner, Recorder
 from .raw import RawWriter
 from .schedule import Pacer
-from .settings import CollectorSettings
+from .settings import CollectorSettings, HealthSettings
 
 logger = logging.getLogger(__name__)
 
 EXIT_FEED_DIED = 1
+EXIT_UNHEALTHY = 1
 EXIT_BAD_SETTINGS = 2
+EXIT_NOT_REPORTED = 3
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -36,7 +40,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Poll every feed until stopped, saving each response and its journal row "
         "to LAMP_BUFFER_DIR.",
     )
-    parser.parse_args(argv)
+    commands.add_parser(
+        "health",
+        help="Check LAMP_BUFFER_DIR for a feed with no successful poll in 10 minutes and "
+        "for under 10 GB of free disk, and report the result to LAMP_HEALTH_PING_URL "
+        "when it is set. Exit 1 when a problem is found.",
+    )
+    arguments = parser.parse_args(argv)
+    if arguments.command == "health":
+        return health()
     return run()
 
 
@@ -54,6 +66,44 @@ def run() -> int:
         healthy = collector.run()
     logger.info("stopped")
     return 0 if healthy else EXIT_FEED_DIED
+
+
+def health() -> int:
+    """Check the buffer once, log each problem found, and report to the ping URL if set."""
+    try:
+        settings = HealthSettings()
+    except ValidationError as error:
+        sys.stderr.write(f"lamp-collector: the settings are not valid\n{error}\n")
+        return EXIT_BAD_SETTINGS
+    configure_logging(settings.api_keys())
+    problems = check_buffer(settings)
+    url = settings.lamp_health_ping_url
+    if url is not None and not report(url.get_secret_value(), problems):
+        return EXIT_NOT_REPORTED
+    return EXIT_UNHEALTHY if problems else 0
+
+
+def check_buffer(settings: HealthSettings) -> list[str]:
+    """Run the health check now and log what it found."""
+    buffer_dir = settings.lamp_buffer_dir
+    check = HealthCheck(LocalStore(buffer_dir), buffer_dir, steady_feeds(settings.api_keys()))
+    problems = check.problems(utc_now())
+    for problem in problems:
+        logger.warning("%s", problem)
+    if not problems:
+        logger.info("every feed polled successfully in the last 10 minutes")
+    return problems
+
+
+def report(url: str, problems: list[str]) -> bool:
+    """Send the result to the ping URL, and return whether it arrived."""
+    try:
+        with heartbeat_client() as client:
+            send_heartbeat(client, url, problems)
+    except HeartbeatError as error:
+        logger.error("the result was not reported: %s", error)
+        return False
+    return True
 
 
 def build_collector(settings: CollectorSettings, client: httpx.Client) -> Collector:

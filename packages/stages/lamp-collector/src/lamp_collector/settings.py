@@ -6,6 +6,7 @@ Validation errors never show input values, since the input holds keys.
 
 from pathlib import Path
 from typing import Self
+from urllib.parse import urlsplit
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,3 +40,18 @@ class CollectorSettings(Settings):
     """Settings for a running collector, which also needs its buffer folder."""
 
     lamp_buffer_dir: Path
+
+
+class HealthSettings(CollectorSettings):
+    """Settings for the health check, which reports to the ping URL when one is set."""
+
+    lamp_health_ping_url: SecretStr | None = None
+
+    @model_validator(mode="after")
+    def _ping_url_is_https(self) -> Self:
+        if self.lamp_health_ping_url is None:
+            return self
+        parts = urlsplit(self.lamp_health_ping_url.get_secret_value())
+        if parts.scheme != "https" or not parts.netloc:
+            raise ValueError("LAMP_HEALTH_PING_URL must be an https URL (the value is not shown)")
+        return self

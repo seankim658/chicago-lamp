@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from lamp_collector.keys import KeyKind
-from lamp_collector.settings import CollectorSettings, Settings
+from lamp_collector.settings import CollectorSettings, HealthSettings, Settings
 from pydantic import ValidationError
 
 BUS_KEY = "Bus0Key0Bus0Key0Bus0Key0B"
@@ -17,6 +17,7 @@ def no_cta_variables(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CTA_TRAIN_KEY", raising=False)
     monkeypatch.delenv("CTA_GTFSRT_KEY", raising=False)
     monkeypatch.delenv("LAMP_BUFFER_DIR", raising=False)
+    monkeypatch.delenv("LAMP_HEALTH_PING_URL", raising=False)
 
 
 def env_file(tmp_path: Path, text: str) -> Path:
@@ -121,3 +122,37 @@ def test_the_collector_refuses_to_start_without_a_buffer_folder(
 
     with pytest.raises(ValidationError, match="lamp_buffer_dir"):
         CollectorSettings(_env_file=None)
+
+
+PING_URL = "https://hc-ping.example/4f1c0de0-secret-check-id"
+
+
+def health_env(tmp_path: Path, ping_line: str) -> Path:
+    return env_file(
+        tmp_path,
+        f"CTA_BUS_KEY={BUS_KEY}\nCTA_TRAIN_KEY={TRAIN_KEY}\nLAMP_BUFFER_DIR=/var/lib/lamp\n"
+        f"{ping_line}\n",
+    )
+
+
+def test_the_health_check_reads_its_ping_url(tmp_path: Path) -> None:
+    settings = HealthSettings(_env_file=health_env(tmp_path, f"LAMP_HEALTH_PING_URL={PING_URL}"))
+
+    assert settings.lamp_health_ping_url is not None
+    assert settings.lamp_health_ping_url.get_secret_value() == PING_URL
+    assert PING_URL not in repr(settings)
+
+
+def test_an_empty_ping_url_counts_as_unset(tmp_path: Path) -> None:
+    settings = HealthSettings(_env_file=health_env(tmp_path, "LAMP_HEALTH_PING_URL="))
+
+    assert settings.lamp_health_ping_url is None
+
+
+def test_a_ping_url_that_is_not_https_is_refused_without_showing_it(tmp_path: Path) -> None:
+    plain = PING_URL.replace("https", "http")
+
+    with pytest.raises(ValidationError, match="LAMP_HEALTH_PING_URL must be") as caught:
+        HealthSettings(_env_file=health_env(tmp_path, f"LAMP_HEALTH_PING_URL={plain}"))
+
+    assert "secret-check-id" not in str(caught.value)
