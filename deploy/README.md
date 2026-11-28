@@ -9,8 +9,9 @@ The service keeps code, data and keys in three places, each with its own owner.
 | `/opt/chicago-lamp`               | This repository and its `.venv`              | Your user. The service only reads it |
 | `/var/lib/chicago-lamp`           | The buffer of raw responses and journal rows | `chicago-lamp`, mode 700             |
 | `/etc/chicago-lamp/collector.env` | CTA keys and the buffer path                 | root, mode 600                       |
+| `/etc/chicago-lamp/uploader.env`  | Object storage keys and the buffer path      | root, mode 600                       |
 
-Updating the code never touches the data, and the service can read its keys without being able to read the file they come from.
+Updating the code never touches the data, and each service can read its keys without being able to read the file they come from. The collector never gets the storage keys, and the uploader never gets the CTA keys.
 
 ## 1. Check the clock and time zone data
 
@@ -104,7 +105,7 @@ df -h /
 sudo sh -c 'cat /var/lib/chicago-lamp/buffer/coverage/journal/*/*.jsonl' | grep -vc '"status":"ok"'
 ```
 
-These show the buffer's size, the free disk space, and how many call attempts were not ok. Nothing is uploaded or removed yet, so the buffer grows every day. The health check in step 10 sends an alert when less than 10 GB is left.
+These show the buffer's size, the free disk space, and how many call attempts were not ok. Files stay in the buffer after they are uploaded in step 11, so it grows every day. The health check in step 10 sends an alert when less than 10 GB is left.
 
 ## 10. Turn on alerts
 
@@ -146,6 +147,63 @@ Every 2 minutes, a health check reads the buffer and reports to [Healthchecks.io
 
    You should get a "down" email within a minute or two, then an "up" email. Never test by stopping the collector, since a gap over 10 minutes is lost data.
 
+## 11. Upload to object storage
+
+Every 5 minutes, the uploader copies new files from the buffer to the private bucket. It uploads each raw response as soon as it sees it, and each hour's journal file 5 minutes after the hour ends. It never replaces an object that is already there, and it keeps every file in the buffer.
+
+These steps use Cloudflare R2. Any S3-compatible service works the same way.
+
+1. In the Cloudflare dashboard, create an R2 API token for the uploader. Give it Object Read & Write on the private bucket only, and limit it to the server's IPv4 address, which `curl -4 ifconfig.me` prints. Keep the access key ID and secret access key it shows. The secret is shown only once.
+2. Add the settings.
+
+   ```bash
+   cd /opt/chicago-lamp
+   sudo install -m 600 -o root -g root deploy/uploader.env.example /etc/chicago-lamp/uploader.env
+   sudoedit /etc/chicago-lamp/uploader.env
+   ```
+
+   Fill in the account's endpoint, the private bucket's name and the token's two keys, with no quotes.
+
+3. Install the uploader, without starting it.
+
+   ```bash
+   sudo install -m 644 deploy/chicago-lamp-uploader.service deploy/chicago-lamp-uploader.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   ```
+
+4. Check that the bucket takes the uploader's writes and never replaces an object. This writes one object under `probe/`, then deletes it, and touches nothing else.
+
+   ```bash
+   sudo systemd-run --quiet --wait --pipe --uid=chicago-lamp --gid=chicago-lamp \
+       --working-directory=/var/lib/chicago-lamp -p EnvironmentFile=/etc/chicago-lamp/uploader.env \
+       /opt/chicago-lamp/.venv/bin/python -I /opt/chicago-lamp/scripts/check_storage.py
+   ```
+
+   Every line must start with `ok`. If a line says `FAIL` or the command prints an error, stop here and don't start the timer. A rejected key or a wrong endpoint shows as an error on the first write.
+
+5. Start the timer, and the first upload now.
+
+   ```bash
+   sudo systemctl enable --now chicago-lamp-uploader.timer
+   sudo systemctl start --no-block chicago-lamp-uploader
+   ```
+
+   The first run uploads everything collected so far, about 40,000 files a day, so it can take an hour or more. The timer starts no other run until it finishes. Follow its progress by counting uploaded files against buffered files.
+
+   ```bash
+   sudo sh -c 'cat /var/lib/chicago-lamp/buffer/uploads/*.jsonl | wc -l'
+   sudo find /var/lib/chicago-lamp/buffer/raw /var/lib/chicago-lamp/buffer/coverage/journal -type f | wc -l
+   ```
+
+6. When the run finishes, read its summary.
+
+   ```bash
+   sudo journalctl -u chicago-lamp-uploader -n 5 --no-pager
+   systemctl list-timers chicago-lamp-uploader.timer --no-pager
+   ```
+
+   The last line reads `uploaded N, already there 0, waiting W, failed 0`. `W` is the current hour's journal file, and sometimes the last hour's, which wait until 5 minutes after their hour.
+
 ## Updating
 
 ```bash
@@ -159,7 +217,7 @@ sudo systemctl restart chicago-lamp-collector
 
 The project's own packages keep version 0.0.0, so without `--reinstall-package` uv sees them as already installed and keeps the old code. The `uv sync` output must list both packages with a `~` in front.
 
-A restart misses a poll or two of each feed, so update only when there is something to ship. If a unit file changed, install it again as in step 7 or step 10 and run `sudo systemctl daemon-reload` before restarting. The health check runs the new code on its next run, with nothing to restart.
+A restart misses a poll or two of each feed, so update only when there is something to ship. If a unit file changed, install it again as in step 7, 10 or 11 and run `sudo systemctl daemon-reload` before restarting. The health check and the uploader run the new code on their next run, with nothing to restart. When only their code changed, skip restarting the collector.
 
 ## When something goes wrong
 
@@ -168,3 +226,4 @@ A restart misses a poll or two of each feed, so update only when there is someth
 - **Stopping takes a while.** Polls in progress finish first, which takes up to about 20 seconds.
 - **An alert says a feed has no successful poll.** Run `sudo journalctl -u chicago-lamp-collector --since '-20min' --no-pager` and look at the warnings for that feed. If the collector is running and every call fails, CTA's side or the key is the likely cause.
 - **An alert says the check is down, with no failure message.** The reports stopped. Check that the server is up, then run `systemctl status chicago-lamp-health.timer` and `sudo journalctl -u chicago-lamp-health -n 20 --no-pager`. Exit status 3 means the report could not reach Healthchecks.io, and exit status 2 means a setting is wrong, often the ping URL, which must start with `https://`.
+- **The uploader failed.** `systemctl status chicago-lamp-uploader` shows the last run, and `sudo journalctl -u chicago-lamp-uploader -n 20 --no-pager` says why. Files that failed stay in the buffer, and the next run tries them again. Exit status 2 means a setting in `/etc/chicago-lamp/uploader.env` is wrong. `stopped after 3 failed uploads in a row` means the bucket can't be reached, often because the server's IP address changed and the token no longer allows it. `a different object already exists` means the bucket holds another file under the same name. The uploader never replaces it, so compare the two before deciding what to do.

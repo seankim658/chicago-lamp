@@ -1,0 +1,13 @@
+# Runs the uploader every 5 minutes. deploy/README.md says how to install it.
+# A run never starts while the last one is still going.
+
+[Unit]
+Description=Run the Chicago LAMP uploader every 5 minutes
+Documentation=file:/opt/chicago-lamp/deploy/README.md
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

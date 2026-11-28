@@ -1,0 +1,44 @@
+# Copies the collector's buffer to object storage, started by
+# chicago-lamp-uploader.timer. deploy/README.md says how to install it.
+
+[Unit]
+Description=Chicago LAMP uploader
+Documentation=file:/opt/chicago-lamp/deploy/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=chicago-lamp
+Group=chicago-lamp
+ExecStart=/opt/chicago-lamp/.venv/bin/lamp-collector upload
+# Only the uploader's own settings, so it never sees the CTA keys and the
+# collector never sees the storage keys.
+EnvironmentFile=/etc/chicago-lamp/uploader.env
+
+# The collector's own folder, which nobody else can write, so no stray .env
+# can override the settings.
+WorkingDirectory=/var/lib/chicago-lamp
+UMask=0077
+# The collector comes first on a one-CPU host.
+Nice=10
+IOSchedulingClass=idle
+# A pass usually takes seconds, but the first one uploads every day collected
+# so far. A pass cut off here loses nothing, since the next one carries on.
+TimeoutStartSec=3h
+
+# The uploader reads the buffer, writes its upload log there, and makes
+# outgoing HTTPS calls.
+ReadWritePaths=/var/lib/chicago-lamp/buffer
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+LockPersonality=yes
