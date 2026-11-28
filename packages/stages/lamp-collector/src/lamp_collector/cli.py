@@ -8,7 +8,7 @@ from collections.abc import Callable, Sequence
 from types import FrameType
 
 import httpx
-from lamp_storage import LocalStore
+from lamp_storage import LocalStore, S3Store, s3_client
 from pydantic import ValidationError
 
 from .collector import Collector, Services, steady_feeds
@@ -20,12 +20,16 @@ from .logs import configure_logging
 from .poll import PollRunner, Recorder
 from .raw import RawWriter
 from .schedule import Pacer
-from .settings import CollectorSettings, HealthSettings
+from .settings import CollectorSettings, HealthSettings, UploaderSettings
+from .upload import Uploader
+from .upload_log import UploadLog
+from .upload_logs import configure_upload_logging
 
 logger = logging.getLogger(__name__)
 
 EXIT_FEED_DIED = 1
 EXIT_UNHEALTHY = 1
+EXIT_UPLOAD_FAILED = 1
 EXIT_BAD_SETTINGS = 2
 EXIT_NOT_REPORTED = 3
 
@@ -46,9 +50,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         "for under 10 GB of free disk, and report the result to LAMP_HEALTH_PING_URL "
         "when it is set. Exit 1 when a problem is found.",
     )
+    commands.add_parser(
+        "upload",
+        help="Copy every file in LAMP_BUFFER_DIR that is due and not yet uploaded to "
+        "LAMP_PRIVATE_BUCKET, once. Buffered files are kept. Exit 1 when an upload failed.",
+    )
     arguments = parser.parse_args(argv)
     if arguments.command == "health":
         return health()
+    if arguments.command == "upload":
+        return upload()
     return run()
 
 
@@ -81,6 +92,27 @@ def health() -> int:
     if url is not None and not report(url.get_secret_value(), problems):
         return EXIT_NOT_REPORTED
     return EXIT_UNHEALTHY if problems else 0
+
+
+def upload() -> int:
+    """Make one upload pass, reading settings from the environment and .env."""
+    try:
+        settings = UploaderSettings()
+    except ValidationError as error:
+        sys.stderr.write(f"lamp-collector: the settings are not valid\n{error}\n")
+        return EXIT_BAD_SETTINGS
+    configure_upload_logging(settings.secrets())
+    report = build_uploader(settings).run_pass(utc_now())
+    return 0 if report.ok else EXIT_UPLOAD_FAILED
+
+
+def build_uploader(settings: UploaderSettings) -> Uploader:
+    buffer = LocalStore(settings.lamp_buffer_dir)
+    client = s3_client(
+        settings.lamp_s3_endpoint_url, settings.credentials(), settings.aws_default_region
+    )
+    archive = S3Store(client, settings.lamp_private_bucket)
+    return Uploader(buffer, archive, UploadLog(buffer))
 
 
 def check_buffer(settings: HealthSettings) -> list[str]:

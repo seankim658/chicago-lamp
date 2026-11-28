@@ -5,6 +5,7 @@ import signal
 from collections.abc import Iterator
 from pathlib import Path
 
+import boto3
 import httpx
 import pytest
 from lamp_collector import cli
@@ -12,10 +13,14 @@ from lamp_collector.cli import (
     EXIT_BAD_SETTINGS,
     EXIT_NOT_REPORTED,
     EXIT_UNHEALTHY,
+    EXIT_UPLOAD_FAILED,
     main,
     stop_on_signals,
 )
 from lamp_collector.logs import configure_logging
+from lamp_collector.upload_logs import configure_upload_logging
+from lamp_storage import LocalStore
+from moto import mock_aws
 
 BUS_KEY = "Bus0Key0Bus0Key0Bus0Key0B"
 TRAIN_KEY = "train0key0train0key0train0key012"
@@ -151,3 +156,90 @@ def test_health_that_cannot_report_says_so_without_the_url(
 @pytest.mark.usefixtures("no_settings")
 def test_health_with_missing_settings_exits_as_bad_settings() -> None:
     assert main(["health"]) == EXIT_BAD_SETTINGS
+
+
+UPLOADER_VARIABLES = (
+    "LAMP_S3_ENDPOINT_URL",
+    "LAMP_PRIVATE_BUCKET",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_DEFAULT_REGION",
+    "AWS_PROFILE",
+    "AWS_ENDPOINT_URL",
+)
+UPLOAD_BUCKET = "lamp-test"
+STORAGE_KEY = "uploader-secret-access-key-0123456789"
+UPLOAD_RAW_KEY = "raw/bus_vehicles/2026-11-27/20261127T150000Z-00-1.json.gz"
+
+
+@pytest.fixture
+def upload_log(monkeypatch: pytest.MonkeyPatch) -> Iterator[io.StringIO]:
+    """Send the upload command's log to a string, then put the root logger back as it was."""
+    root = logging.getLogger()
+    saved_handlers, saved_level = list(root.handlers), root.level
+    stream = io.StringIO()
+    monkeypatch.setattr(
+        cli,
+        "configure_upload_logging",
+        lambda secrets: configure_upload_logging(secrets, stream),
+    )
+    yield stream
+    root.handlers[:] = saved_handlers
+    root.setLevel(saved_level)
+
+
+@pytest.fixture
+def upload_bucket(
+    no_settings: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Path]:
+    """A buffer and a moto bucket, with every uploader setting but no CTA keys."""
+    for variable in UPLOADER_VARIABLES:
+        monkeypatch.delenv(variable, raising=False)
+    buffer = tmp_path / "buffer"
+    buffer.mkdir()
+    monkeypatch.setenv("LAMP_BUFFER_DIR", str(buffer))
+    monkeypatch.setenv("LAMP_PRIVATE_BUCKET", UPLOAD_BUCKET)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", STORAGE_KEY)
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    with mock_aws():
+        boto3.client("s3").create_bucket(Bucket=UPLOAD_BUCKET)
+        yield buffer
+
+
+@pytest.mark.usefixtures("upload_log")
+def test_upload_copies_the_buffer_to_the_bucket(upload_bucket: Path) -> None:
+    LocalStore(upload_bucket).put(UPLOAD_RAW_KEY, b"raw body")
+
+    assert main(["upload"]) == 0
+
+    stored = boto3.client("s3").get_object(Bucket=UPLOAD_BUCKET, Key=UPLOAD_RAW_KEY)
+    assert stored["Body"].read() == b"raw body"
+
+
+def test_upload_that_fails_exits_1_and_keeps_the_secret_out_of_the_log(
+    upload_bucket: Path, upload_log: io.StringIO, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    LocalStore(upload_bucket).put(UPLOAD_RAW_KEY, b"raw body")
+    monkeypatch.setenv("LAMP_PRIVATE_BUCKET", "no-such-bucket")
+
+    assert main(["upload"]) == EXIT_UPLOAD_FAILED
+
+    assert "NoSuchBucket" in upload_log.getvalue()
+    assert STORAGE_KEY not in upload_log.getvalue()
+
+
+@pytest.mark.usefixtures("no_settings")
+def test_upload_needs_no_cta_keys_and_names_its_missing_settings(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for variable in UPLOADER_VARIABLES:
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", STORAGE_KEY)
+
+    assert main(["upload"]) == EXIT_BAD_SETTINGS
+
+    error = capsys.readouterr().err
+    assert "lamp_private_bucket" in error
+    assert "cta_bus_key" not in error
+    assert STORAGE_KEY not in error
