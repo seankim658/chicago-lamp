@@ -1,7 +1,7 @@
 from .errors import InvalidKeyError, ObjectConflictError, ObjectNotFoundError, StorageError
 from .keys import validate_key, validate_prefix
 from .local import LocalStore
-from .s3 import S3Store, s3_client
+from .s3 import S3Credentials, S3Store, s3_client
 from .store import Store
 
 __all__ = [
@@ -9,6 +9,7 @@ __all__ = [
     "LocalStore",
     "ObjectConflictError",
     "ObjectNotFoundError",
+    "S3Credentials",
     "S3Store",
     "StorageError",
     "Store",

@@ -6,8 +6,11 @@ from pathlib import Path
 import boto3
 import pytest
 from botocore.stub import Stubber
-from lamp_storage import LocalStore, S3Store, StorageError, s3_client
+from lamp_storage import LocalStore, S3Credentials, S3Store, StorageError, s3_client
 from moto import mock_aws
+
+# A made-up key pair, which moto accepts like any other.
+GIVEN_KEYS = S3Credentials("given-id", "given-secret")
 
 
 @pytest.fixture
@@ -88,3 +91,21 @@ def test_s3_missing_bucket_is_a_storage_error(s3_bucket: str) -> None:
 
     with pytest.raises(StorageError, match="NoSuchBucket"):
         store.put("a", b"x")
+
+
+def test_s3_client_uses_the_credentials_and_region_it_is_given(
+    s3_bucket: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID")
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY")
+    monkeypatch.delenv("AWS_DEFAULT_REGION")
+    client = s3_client(endpoint_url=None, credentials=GIVEN_KEYS, region="us-east-1")
+    S3Store(client, s3_bucket).put("a", b"x")
+
+    assert client.meta.region_name == "us-east-1"
+    assert S3Store(client, s3_bucket).get("a") == b"x"
+
+
+def test_s3_credentials_never_show_in_their_repr() -> None:
+    assert "given-id" not in repr(GIVEN_KEYS)
+    assert "given-secret" not in repr(GIVEN_KEYS)

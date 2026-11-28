@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import boto3
@@ -16,11 +17,24 @@ _EXISTS_CODES = frozenset({"PreconditionFailed", "412"})
 _MISSING_CODES = frozenset({"NoSuchKey", "404", "NotFound"})
 
 
-def s3_client(endpoint_url: str | None) -> "S3Client":
+@dataclass(frozen=True)
+class S3Credentials:
+    """An access key pair for an S3-compatible service, kept out of every repr."""
+
+    access_key_id: str = field(repr=False)
+    secret_access_key: str = field(repr=False)
+
+
+def s3_client(
+    endpoint_url: str | None,
+    credentials: S3Credentials | None = None,
+    region: str | None = None,
+) -> "S3Client":
     """Build an S3 client for AWS S3, Cloudflare R2 or another S3-compatible service.
 
-    Credentials and region come from the standard AWS environment variables. Every
-    upload carries a checksum that the service verifies before storing it.
+    Credentials and region not given here come from the standard AWS environment
+    variables. Every upload carries a checksum that the service verifies before
+    storing it.
     """
     config = Config(
         connect_timeout=5,
@@ -28,7 +42,16 @@ def s3_client(endpoint_url: str | None) -> "S3Client":
         retries={"max_attempts": 5, "mode": "standard"},
         request_checksum_calculation="when_supported",
     )
-    return boto3.client("s3", endpoint_url=endpoint_url, config=config)
+    if credentials is None:
+        return boto3.client("s3", endpoint_url=endpoint_url, config=config, region_name=region)
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        config=config,
+        region_name=region,
+        aws_access_key_id=credentials.access_key_id,
+        aws_secret_access_key=credentials.secret_access_key,
+    )
 
 
 class S3Store:
