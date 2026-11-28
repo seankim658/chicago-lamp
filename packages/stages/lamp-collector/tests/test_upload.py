@@ -1,10 +1,11 @@
+import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
 import boto3
 import pytest
-from lamp_collector.upload import Archive, Uploader, UploadReport
+from lamp_collector.upload import UPLOAD_WORKERS, Archive, Uploader, UploadReport
 from lamp_collector.upload_log import UploadLog, upload_entry
 from lamp_storage import LocalStore, S3Store, StorageError, s3_client
 from moto import mock_aws
@@ -41,10 +42,27 @@ class UnreachableStore:
 
     def __init__(self) -> None:
         self.writes = 0
+        self._lock = threading.Lock()
 
     def put_new(self, key: str, data: bytes) -> bool:
-        self.writes += 1
+        with self._lock:
+            self.writes += 1
         raise StorageError(f"could not write {key!r}: connection refused")
+
+
+class MeetingStore:
+    """An archive whose writes each wait until a full batch of writes is under way."""
+
+    def __init__(self, batch: int) -> None:
+        self._barrier = threading.Barrier(batch, timeout=5)
+
+    def put_new(self, key: str, data: bytes) -> bool:
+        self._barrier.wait()
+        return True
+
+
+def raw_key(number: int) -> str:
+    return f"raw/bus_vehicles/2026-11-27/20261127T15{number:04d}Z-00-1.json.gz"
 
 
 def uploader(buffer: LocalStore, archive: Archive) -> Uploader:
@@ -122,16 +140,26 @@ def test_a_different_object_in_storage_is_reported_and_left_alone(
 
 
 def test_unreachable_storage_stops_the_pass_and_leaves_every_file(buffer: LocalStore) -> None:
-    for second in range(5):
-        buffer.put(f"raw/bus_vehicles/2026-11-27/20261127T15000{second}Z-00-1.json.gz", b"x")
+    for number in range(3 * UPLOAD_WORKERS):
+        buffer.put(raw_key(number), b"x")
     archive = UnreachableStore()
 
     report = uploader(buffer, archive).run_pass(JOURNAL_DUE)
 
-    assert report == UploadReport(failed=3, stopped_early=True)
-    assert archive.writes == 3
+    assert report == UploadReport(failed=UPLOAD_WORKERS, stopped_early=True)
+    assert archive.writes == UPLOAD_WORKERS
     assert UploadLog(buffer).entries() == {}
-    assert len(list(buffer.list_keys("raw/"))) == 5
+    assert len(list(buffer.list_keys("raw/"))) == 3 * UPLOAD_WORKERS
+
+
+def test_several_uploads_are_under_way_at_once(buffer: LocalStore) -> None:
+    for number in range(2 * UPLOAD_WORKERS):
+        buffer.put(raw_key(number), b"x")
+
+    report = uploader(buffer, MeetingStore(UPLOAD_WORKERS)).run_pass(JOURNAL_DUE)
+
+    assert report == UploadReport(uploaded=2 * UPLOAD_WORKERS)
+    assert len(UploadLog(buffer).entries()) == 2 * UPLOAD_WORKERS
 
 
 def test_only_raw_files_and_journal_files_are_uploaded(
